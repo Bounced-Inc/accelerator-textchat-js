@@ -554,6 +554,8 @@
   // Constructor
   var TextChatAccPack = function (options) {
 
+    _initialized = false;
+
     // Save a reference to this
     _this = this;
 
