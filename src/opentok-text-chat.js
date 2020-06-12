@@ -124,7 +124,6 @@
       '<div class="ots-send-message-box">',
       '<input type="text" maxlength=' + _this.options.limitCharacterMessage + ' class="ots-message-input" placeholder="Enter your message here" id="messageBox">',
       '<button class="ots-icon-check" id="sendMessage" type="submit"></button>',
-      '<div class="ots-character-count"><span><span id="characterCount">0</span>/' + _this.options.limitCharacterMessage + ' characters</span></div>',
       '</div>',
       '</div>',
       '</div>',
@@ -473,7 +472,7 @@
     });
 
     return _.defaults(_.omit(options, ['accPack', '_sender']), {
-      limitCharacterMessage: 160,
+      limitCharacterMessage: 8000,
       controlsContainer: '#feedControls',
       textChatContainer: '#chatContainer',
       alwaysOpen: false,
