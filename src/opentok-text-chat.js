@@ -160,9 +160,11 @@
     return bubble;
   };
 
-  var _renderChatMessage = function (messageSenderId, messageSenderAlias, message, sentOn, isSender = false) {
+  var _renderChatMessage = function (messageSenderId, messageSenderAlias, message, sentOn) {
+    const myUid = JSON.parse(_session.connection.data).user;
 
-    var sentByClass = isSender || (_sender.id === messageSenderId) ?
+    //_sender.id is randomly generated, does not work to check user id
+    var sentByClass = messageSenderId === myUid || (_sender.id === messageSenderId) ?
       'ots-message-item ots-message-sent' :
       'ots-message-item';
 
@@ -298,11 +300,8 @@
   var _onIncomingMessage = function (signal) {
     _log(_logEventData.actionReceiveMessage, _logEventData.variationAttempt);
     const { sender, message, createdAt } = signal.data;
-    
-    const myId = JSON.parse(_session.connection.data).user;
-    const isSender = sender._id === myId;
 
-    _renderChatMessage(sender._id, sender.name, message, createdAt, isSender);
+    _renderChatMessage(sender._id, sender.name, message, createdAt);
     _log(_logEventData.actionReceiveMessage, _logEventData.variationSuccess);
   };
 
@@ -349,10 +348,7 @@
       }
     )
       .then(res => res.data.reverse().forEach(({ sender, message, createdAt }) => {
-        const myId = JSON.parse(_session.connection.data).user;
-        const isSender = sender._id === myId;
-
-        _renderChatMessage(sender._id, sender.name, message, createdAt, isSender);
+        _renderChatMessage(sender._id, sender.name, message, createdAt);
       }))
       .catch(err => console.log(err));
   };
