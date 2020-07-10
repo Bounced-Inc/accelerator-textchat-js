@@ -101,7 +101,6 @@
   var _controlAdded = false;
   var _sender;
   var _composer;
-  var _lastMessage;
   var _newMessages;
   var _sentMessageHistory = [];
   var _remoteParticipant = false;
@@ -139,16 +138,6 @@
       '</div>'
     ].join('\n');
     /* eslint-enable max-len, prefer-template */
-  };
-
-  var _shouldAppendMessage = function (data) {
-
-    if (_lastMessage) {
-      return _lastMessage.sender.id === data.sender.id && _lastMessage.sender.id === data.sender.id;
-    }
-
-    return false;
-
   };
 
   var _cleanComposer = function () {
@@ -192,17 +181,11 @@
 
   var _handleMessageSent = function (data) {
     _cleanComposer();
-    if (_shouldAppendMessage(data)) {
-      $('.ots-item-text').last().append(['<span>', data.message, '</span>'].join(''));
-      var chatholder = $(_newMessages);
-      chatholder[0].scrollTop = chatholder[0].scrollHeight;
-    } else {
-      _renderChatMessage(_sender.id, _sender.alias, data.message, data.sentOn);
-    }
-    _lastMessage = data;
+
+    // TODO: render message immediately, but in a pending state rather than as delivered
+    //_renderChatMessage(_sender.id, _sender.alias, data.message, data.sentOn);
 
     _triggerEvent('messageSent', data);
-
   };
 
   var _handleMessageError = function (error) {
@@ -262,6 +245,7 @@
             message: text,
             sentOn: Date.now()
           });
+
           if (this.futureMessageNotice) {
             this.futureMessageNotice = false;
           }
@@ -314,27 +298,28 @@
   var _onIncomingMessage = function (signal) {
     _log(_logEventData.actionReceiveMessage, _logEventData.variationAttempt);
     const { sender, message, createdAt } = signal.data;
+    
+    const myId = JSON.parse(_session.connection.data).user;
+    const isSender = sender._id === myId;
 
-    if (_shouldAppendMessage({ sender: { id: sender._id } })) {
-      $('.ots-item-text').last().append(['<span>', message, '</span>'].join(''));
-    } else {
-      _renderChatMessage(sender._id, sender.name, message, createdAt);
-    }
-
-    _lastMessage = { sender: { id: sender._id } };
+    _renderChatMessage(sender._id, sender.name, message, createdAt, isSender);
     _log(_logEventData.actionReceiveMessage, _logEventData.variationSuccess);
   };
 
   var _handleTextChat = function (event) {
-    const myId = JSON.parse(_session.connection.data).user;
-    const fromId = event.data.sender._id;
-    if (myId !== fromId) {
-      var handler = _onIncomingMessage(event);
-      if (handler && typeof handler === 'function') {
-        handler(event);
-      }
-      _triggerEvent('messageReceived', event);
+    // TODO: when setting up pending/delivered messages, if message sender is this current user, change message state from pending->delivered
+    // _handleMessageSent is where we need to inject the message into the chat (with a pending state)
+
+    // const myId = JSON.parse(_session.connection.data).user;
+    // const fromId = event.data.sender._id;
+    // if (myId === fromId) {
+    // }
+    
+    var handler = _onIncomingMessage(event);
+    if (handler && typeof handler === 'function') {
+      handler(event);
     }
+    _triggerEvent('messageReceived', event);
   };
 
   var _deliverUnsentMessages = function () {
@@ -367,19 +352,7 @@
         const myId = JSON.parse(_session.connection.data).user;
         const isSender = sender._id === myId;
 
-        if (_shouldAppendMessage({ sender: { id: sender._id } })) {
-          if (isSender) {
-            _cleanComposer();
-            $('.ots-item-text').last().append(['<span>', message, '</span>'].join(''));
-            var chatholder = $(_newMessages);
-            chatholder[0].scrollTop = chatholder[0].scrollHeight;
-          } else {
-            $('.ots-item-text').last().append(['<span>', message, '</span>'].join(''));
-          }
-        } else {
-          _renderChatMessage(sender._id, sender.name, message, createdAt, isSender);
-        }
-        _lastMessage = { sender: { id: sender._id } };
+        _renderChatMessage(sender._id, sender.name, message, createdAt, isSender);
       }))
       .catch(err => console.log(err));
   };
