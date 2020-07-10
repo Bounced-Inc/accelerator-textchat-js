@@ -5,12 +5,14 @@
 
   var _;
   var $;
+  var axios;
   var OTKAnalytics;
 
   if (typeof module === 'object' && typeof module.exports === 'object') {
     /* eslint-disable import/no-unresolved */
     _ = require('underscore');
     $ = require('jquery');
+    axios = require('axios');
     window.jQuery = $;
     window.moment = require('moment');
     require('kuende-livestamp');
@@ -19,6 +21,7 @@
   } else {
     _ = this._;
     $ = this.$;
+    axios = this.axios;
     window.jQuery = $;
     window.moment = this.moment;
     OTKAnalytics = this.OTKAnalytics;
@@ -50,6 +53,12 @@
     variationSuccess: 'Success'
   };
 
+  // Set constants
+  axios.defaults.baseURL = process.env.REACT_APP_BUILD_ENV === 'development'
+    ? process.env.REACT_APP_DEV_BASE_URL
+    : process.env.REACT_APP_PROD_BASE_URL;
+  const eventId = window.location.pathname.replace('/events/', '').replace('/virtual', '');
+  const token = localStorage.getItem('token');
 
   var _logAnalytics = function () {
 
@@ -162,9 +171,9 @@
     return bubble;
   };
 
-  var _renderChatMessage = function (messageSenderId, messageSenderAlias, message, sentOn) {
+  var _renderChatMessage = function (messageSenderId, messageSenderAlias, message, sentOn, isSender = false) {
 
-    var sentByClass = _sender.id === messageSenderId ?
+    var sentByClass = isSender || (_sender.id === messageSenderId) ?
       'ots-message-item ots-message-sent' :
       'ots-message-item';
 
@@ -220,72 +229,22 @@
   };
 
   var _sendMessage = function (recipient, message) {
-
     var deferred = new $.Deferred();
-
-    _sentMessageHistory.push({ recipient: recipient, message: message });
-    if (!_remoteParticipant) {
-      _showWaitingMessage();
-      deferred.resolve();
-    } else {
-      _hideWaitingMessage();
-    }
-
-    var messageData = {
-      text: message,
-      sender: {
-        id: _sender.id,
-        alias: _sender.alias,
-      },
-      sentOn: Date.now()
-    };
 
     // Add SEND_MESSAGE attempt log event
     _log(_logEventData.actionSendMessage, _logEventData.variationAttempt);
-
-    if (recipient === undefined) {
-      _session
-        .signal({
-          type: 'text-chat',
-          data: JSON.stringify(messageData)
-        }, function (error) {
-          if (error) {
-            var errorMessage = 'Error sending a message. ';
-            // Add SEND_MESSAGE failure log event
-            _log(_logEventData.actionSendMessage, _logEventData.variationFailure);
-            if (error.code === 413) {
-              errorMessage += 'The chat message is over size limit.';
-            } else {
-              if (error.code === 500) {
-                errorMessage += 'Check your network connection.';
-              }
-            }
-            deferred.reject(_.extend(_.omit(error, 'message')), {
-              message: errorMessage
-            });
-          } else {
-            console.log('Message sent');
-            // Add SEND_MESSAGE success log event
-            _log(_logEventData.actionSendMessage, _logEventData.variationSuccess);
-            deferred.resolve(messageData);
+    if (!recipient) {
+      axios.post(
+        `/api/events/${eventId}/chats`,
+        { message },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
           }
-        });
-    } else {
-      _session.signal({
-        type: 'text-chat',
-        data: JSON.stringify(messageData),
-        to: recipient
-      }, function (error) {
-        if (error) {
-          console.log('Error sending a message');
-          _log(_logEventData.actionSendMessage, _logEventData.variationFailure);
-          deferred.resolve(error);
-        } else {
-          console.log('Message sent');
-          deferred.resolve(messageData);
-          _log(_logEventData.actionSendMessage, _logEventData.variationSuccess);
         }
-      });
+      )
+        .then(deferred.resolve())
+        .catch(err => console.log(err));
     }
 
     return deferred.promise();
@@ -354,22 +313,22 @@
 
   var _onIncomingMessage = function (signal) {
     _log(_logEventData.actionReceiveMessage, _logEventData.variationAttempt);
-    var data = JSON.parse(signal.data);
+    const { sender, message, createdAt } = signal.data;
 
-    if (_shouldAppendMessage(data)) {
-      $('.ots-item-text').last().append(['<span>', data.text, '</span>'].join(''));
+    if (_shouldAppendMessage({ sender: { id: sender._id } })) {
+      $('.ots-item-text').last().append(['<span>', message, '</span>'].join(''));
     } else {
-      _renderChatMessage(data.sender.id, data.sender.alias, data.text, data.sentOn);
+      _renderChatMessage(sender._id, sender.name, message, createdAt);
     }
 
-    _lastMessage = data;
+    _lastMessage = { sender: { id: sender._id } };
     _log(_logEventData.actionReceiveMessage, _logEventData.variationSuccess);
   };
 
   var _handleTextChat = function (event) {
-    var me = _session.connection.connectionId;
-    var from = event.from.connectionId;
-    if (from !== me) {
+    const myId = JSON.parse(_session.connection.data).user;
+    const fromId = event.data.sender._id;
+    if (myId !== fromId) {
       var handler = _onIncomingMessage(event);
       if (handler && typeof handler === 'function') {
         handler(event);
@@ -394,6 +353,35 @@
     _triggerEvent('showTextChat');
     _session.on('signal:text-chat', _handleTextChat);
     _log(_logEventData.actionStart, _logEventData.variationSuccess);
+
+    // Populate chat with past 100 messages
+    axios.get(
+      `/api/events/${eventId}/chats`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        }
+      }
+    )
+      .then(res => res.data.reverse().forEach(({ sender, message, createdAt }) => {
+        const myId = JSON.parse(_session.connection.data).user;
+        const isSender = sender._id === myId;
+
+        if (_shouldAppendMessage({ sender: { id: sender._id } })) {
+          if (isSender) {
+            _cleanComposer();
+            $('.ots-item-text').last().append(['<span>', message, '</span>'].join(''));
+            var chatholder = $(_newMessages);
+            chatholder[0].scrollTop = chatholder[0].scrollHeight;
+          } else {
+            $('.ots-item-text').last().append(['<span>', message, '</span>'].join(''));
+          }
+        } else {
+          _renderChatMessage(sender._id, sender.name, message, createdAt, isSender);
+        }
+        _lastMessage = { sender: { id: sender._id } };
+      }))
+      .catch(err => console.log(err));
   };
 
   var _showTextChat = function () {
@@ -522,7 +510,7 @@
           if (_controlAdded) {
             document.querySelector('#enableTextChat').classList.remove('ots-hidden');
           } else {
-            _this.options.appendControl && _appendControl()
+            _this.options.appendControl && _appendControl();
           }
         }
       });
@@ -571,7 +559,7 @@
     if (_this.options.alwaysOpen) {
       _initTextChat();
     } else {
-      _this.options.appendControl && _appendControl()
+      _this.options.appendControl && _appendControl();
     }
     _registerEvents();
     _addEventListeners();
@@ -591,7 +579,7 @@
     hideTextChat: function () {
       _hideTextChat();
     },
-    deliverUnsentMessages:function(){
+    deliverUnsentMessages: function () {
       _deliverUnsentMessages();
     }
   };
