@@ -54,11 +54,14 @@
   };
 
   // Set constants
+  const token = localStorage.getItem('token');
+
   axios.defaults.baseURL = process.env.REACT_APP_BUILD_ENV === 'development'
     ? process.env.REACT_APP_DEV_BASE_URL
     : process.env.REACT_APP_PROD_BASE_URL;
+  axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
+
   const eventId = window.location.pathname.replace('/events/', '').replace('/virtual', '');
-  const token = localStorage.getItem('token');
 
   var _logAnalytics = function () {
 
@@ -219,17 +222,12 @@
     // Add SEND_MESSAGE attempt log event
     _log(_logEventData.actionSendMessage, _logEventData.variationAttempt);
     if (!recipient) {
-      axios.post(
-        `/api/events/${eventId}/chats`,
-        { message },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          }
-        }
-      )
+      const url = '/api/events/' + eventId + '/chats';
+      axios.post(url, { message: message })
         .then(deferred.resolve())
-        .catch(err => console.log(err));
+        .catch(function(err) {
+          console.log(err)
+        });
     }
 
     return deferred.promise();
@@ -299,9 +297,7 @@
 
   var _onIncomingMessage = function (signal) {
     _log(_logEventData.actionReceiveMessage, _logEventData.variationAttempt);
-    const { sender, message, createdAt } = signal.data;
-
-    _renderChatMessage(sender._id, sender.name, message, createdAt);
+    _renderChatMessage(signal.data.sender._id, signal.data.sender.name, signal.data.message, signal.data.createdAt);
     _log(_logEventData.actionReceiveMessage, _logEventData.variationSuccess);
   };
 
@@ -339,18 +335,16 @@
     _log(_logEventData.actionStart, _logEventData.variationSuccess);
 
     // Populate chat with past 100 messages
-    axios.get(
-      `/api/events/${eventId}/chats`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        }
-      }
-    )
-      .then(res => res.data.reverse().forEach(({ sender, message, createdAt }) => {
-        _renderChatMessage(sender._id, sender.name, message, createdAt);
-      }))
-      .catch(err => console.log(err));
+    const url = '/api/events/' + eventId + '/chats';
+    axios.get(url)
+      .then(function (res) {
+        res.data.reverse().forEach(function (data) {
+          _renderChatMessage(data.sender._id, data.sender.name, data.message, data.createdAt);
+        });
+      })
+      .catch(function (err) {
+        console.log(err);
+      });
   };
 
   var _showTextChat = function () {
