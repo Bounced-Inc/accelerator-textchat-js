@@ -132,8 +132,9 @@
       '<div class="ots-message-item ots-message-sent">',
       '</div>',
       '</div>',
-      '<div class="ots-send-message-box">',
-      '<input type="text" maxlength=' + _this.options.limitCharacterMessage + ' class="ots-message-input" placeholder="Enter your message here" id="messageBox">',
+      '<div class="ots-send-message-box" style="height:70px;">', //
+      '<textarea type="text" maxlength=' + _this.options.limitCharacterMessage + ' class="ots-message-input" placeholder="Enter your message here" id="messageBox" style="height:100%; line-height:1.5; padding:12.5px 12.5px 0;">', //
+      '</textarea>',
       '<button class="ots-icon-check" id="sendMessage" type="submit"></button>',
       '</div>',
       '</div>',
@@ -151,7 +152,7 @@
   var _getBubbleHtml = function (message) {
     /* eslint-disable max-len, prefer-template */
     var bubble = [
-      '<div class="' + message.messageClass + '" >',
+      '<div class="' + message.messageClass + '" style="margin: 15px 17.5px 0 17.5px;">',
       '<div class="ots-user-name-initial"> ' + message.username[0] + '</div>',
       '<div class="ots-item-timestamp"> ' + message.username + ', <span data-livestamp=" ' + new Date(message.time) + '" </span></div>',
       '<div class="ots-item-text">',
@@ -188,7 +189,7 @@
     _cleanComposer();
 
     // TODO: render message immediately, but in a pending state rather than as delivered
-    //_renderChatMessage(_sender.id, _sender.alias, data.message, data.sentOn);
+    // _renderChatMessage(_sender.id, _sender.alias, data.message, data.sentOn);
 
     _triggerEvent('messageSent', data);
   };
@@ -309,7 +310,7 @@
     // const fromId = event.data.sender._id;
     // if (myId === fromId) {
     // }
-    
+
     var handler = _onIncomingMessage(event);
     if (handler && typeof handler === 'function') {
       handler(event);
