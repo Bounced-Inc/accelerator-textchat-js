@@ -184,11 +184,11 @@
 
   };
 
+  // This function is triggered as soon as message delivery ATTEMPT starts
   var _handleMessageSent = function (data) {
     _cleanComposer();
-
-    // TODO: render message immediately, but in a pending state rather than as delivered
-    //_renderChatMessage(_sender.id, _sender.alias, data.message, data.sentOn);
+    // Render message immediately, but with "Sending" text
+    _renderChatMessage(_sender.id, _sender.alias, data.message, data.sentOn);
 
     _triggerEvent('messageSent', data);
   };
@@ -297,7 +297,12 @@
 
   var _onIncomingMessage = function (signal) {
     _log(_logEventData.actionReceiveMessage, _logEventData.variationAttempt);
-    _renderChatMessage(signal.data.sender._id, signal.data.sender.name, signal.data.message, signal.data.createdAt);
+
+    const myUid = JSON.parse(_session.connection.data).user;
+    if (myUid !== signal.data.sender._id) {
+      _renderChatMessage(signal.data.sender._id, signal.data.sender.name, signal.data.message, signal.data.createdAt);
+    }
+
     _log(_logEventData.actionReceiveMessage, _logEventData.variationSuccess);
   };
 
