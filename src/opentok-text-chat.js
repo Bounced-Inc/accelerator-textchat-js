@@ -313,7 +313,7 @@
         signal.data.createdAt
       );
     } else {
-      const newItemTimestamp = '<div class="ots-item-timestamp"><div>' + signal.data.sender.name + '</div>, <span data-livestamp=" ' + new Date(signal.data.createdAt) + '" </span></div>';
+      const newItemTimestamp = '<div class="ots-item-timestamp">' + signal.data.sender.name + ', <span data-livestamp=" ' + new Date(signal.data.createdAt) + '" </span></div>';
       // Get div with deliveryToken class and replace with name + timeago
       $('.' + signal.data.deliveryToken).replaceWith(newItemTimestamp);
     }
