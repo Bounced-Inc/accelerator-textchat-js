@@ -6,6 +6,7 @@
   var _;
   var $;
   var axios;
+  var crypto;
   var OTKAnalytics;
 
   if (typeof module === 'object' && typeof module.exports === 'object') {
@@ -13,6 +14,7 @@
     _ = require('underscore');
     $ = require('jquery');
     axios = require('axios');
+    crypto = require('crypto');
     window.jQuery = $;
     window.moment = require('moment');
     require('kuende-livestamp');
@@ -22,6 +24,7 @@
     _ = this._;
     $ = this.$;
     axios = this.axios;
+    crypto = this.crypto;
     window.jQuery = $;
     window.moment = this.moment;
     OTKAnalytics = this.OTKAnalytics;
@@ -59,7 +62,7 @@
   axios.defaults.baseURL = process.env.REACT_APP_BUILD_ENV === 'development'
     ? process.env.REACT_APP_DEV_BASE_URL
     : process.env.REACT_APP_PROD_BASE_URL;
-  axios.defaults.headers.common['Authorization'] = 'Bearer ' + token;
+  axios.defaults.headers.common.Authorization = 'Bearer ' + token;
 
   const eventId = window.location.pathname.replace('/events/', '').replace('/virtual', '');
 
@@ -105,8 +108,6 @@
   var _sender;
   var _composer;
   var _newMessages;
-  var _sentMessageHistory = [];
-  var _remoteParticipant = false;
 
   // Reference to Accelerator Pack Common Layer
   var _accPack;
@@ -117,8 +118,6 @@
 
   // Private methods
   var renderUILayout = function () {
-    var deliveryMessage =
-      _this.options.waitingMessage || 'Messages will be delivered once your contact arrives';
     /* eslint-disable max-len, prefer-template */
     return [
       '<div class="ots-text-chat-container">',
@@ -128,7 +127,6 @@
       '</div>',
       '<div id="otsChatWrap">',
       '<div class="ots-messages-holder" id="messagesHolder">',
-      '<div class="ots-messages-alert ots-hidden" id="messagesWaiting">' + deliveryMessage + '</div>',
       '<div class="ots-message-item ots-message-sent">',
       '</div>',
       '</div>',
@@ -150,10 +148,13 @@
 
   var _getBubbleHtml = function (message) {
     /* eslint-disable max-len, prefer-template */
+    const pendingMessageClass = 'ots-item-timestamp ' + message.deliveryToken;
     var bubble = [
       '<div class="' + message.messageClass + '" >',
       '<div class="ots-user-name-initial"> ' + message.username[0] + '</div>',
-      '<div class="ots-item-timestamp"> ' + message.username + ', <span data-livestamp=" ' + new Date(message.time) + '" </span></div>',
+      message.renderAsPending
+        ? '<div class="' + pendingMessageClass + '"> Sending... </div>'
+        : '<div class="ots-item-timestamp">' + message.username + ', <span data-livestamp=" ' + new Date(message.time) + '" </span></div>',
       '<div class="ots-item-text">',
       '<span> ' + message.message + '</span>',
       '</div>',
@@ -163,33 +164,47 @@
     return bubble;
   };
 
-  var _renderChatMessage = function (messageSenderId, messageSenderAlias, message, sentOn) {
+  var _renderChatMessage = function (
+    messageSenderId,
+    messageSenderAlias,
+    message,
+    sentOn,
+    deliveryToken,
+    renderAsPending = false
+  ) {
+    // _sender.id is randomly generated; we need to use _session... (myUid) to check user id
     const myUid = JSON.parse(_session.connection.data).user;
-
-    //_sender.id is randomly generated, does not work to check user id
-    var sentByClass = messageSenderId === myUid || (_sender.id === messageSenderId) ?
+    const sentByClass = messageSenderId === myUid || _sender.id === messageSenderId ?
       'ots-message-item ots-message-sent' :
       'ots-message-item';
 
-    var view = _getBubbleHtml({
+    const view = _getBubbleHtml({
       username: messageSenderAlias,
       message: message,
       messageClass: sentByClass,
-      time: sentOn
+      time: sentOn,
+      deliveryToken,
+      renderAsPending,
     });
 
-    var chatholder = $(_newMessages);
+    const chatholder = $(_newMessages);
     chatholder.append(view);
     chatholder[0].scrollTop = chatholder[0].scrollHeight;
 
   };
 
+  // This function is triggered as soon as message delivery ATTEMPT starts
   var _handleMessageSent = function (data) {
     _cleanComposer();
-
-    // TODO: render message immediately, but in a pending state rather than as delivered
-    //_renderChatMessage(_sender.id, _sender.alias, data.message, data.sentOn);
-
+    // Render message immediately, but with "Sending" text (renderAsPending = true)
+    _renderChatMessage(
+      _sender.id,
+      _sender.alias,
+      data.message,
+      data.sentOn,
+      data.deliveryToken,
+      true
+    );
     _triggerEvent('messageSent', data);
   };
 
@@ -202,40 +217,28 @@
     _triggerEvent('errorSendingMessage', error);
   };
 
-  var _showWaitingMessage = function () {
-    var el = document.getElementById('messagesWaiting');
-    el && el.classList.remove('ots-hidden');
-    var parent = document.getElementById('messagesHolder');
-    parent && parent.classList.add('has-alert');
-  };
-
-  var _hideWaitingMessage = function () {
-    var el = document.getElementById('messagesWaiting');
-    el && el.classList.add('ots-hidden');
-    var parent = document.getElementById('messagesHolder');
-    parent && parent.classList.add('has-alert');
-  };
-
-  var _sendMessage = function (recipient, message) {
+  var _sendMessage = function (message, deliveryToken) {
     var deferred = new $.Deferred();
 
     // Add SEND_MESSAGE attempt log event
     _log(_logEventData.actionSendMessage, _logEventData.variationAttempt);
-    if (!recipient) {
-      const url = '/api/events/' + eventId + '/chats';
-      axios.post(url, { message: message })
-        .then(deferred.resolve())
-        .catch(function(err) {
-          console.log(err)
-        });
-    }
+
+    // POST message to /chats route along with randomly generated deliveryToken
+    // (for client to verify message was sent succesfully on signal receipt)
+    const url = '/api/events/' + eventId + '/chats';
+    axios.post(url, { message: message, deliveryToken })
+      .then(deferred.resolve())
+      .catch(function (err) {
+        console.log(err);
+      });
 
     return deferred.promise();
   };
 
   var _sendTxtMessage = function (text) {
     if (!_.isEmpty(text)) {
-      $.when(_sendMessage(_this._remoteParticipant, text))
+      const deliveryToken = crypto.randomBytes(3).toString('hex');
+      $.when(_sendMessage(text, deliveryToken))
         .then(function () {
           _handleMessageSent({
             sender: {
@@ -243,6 +246,7 @@
               alias: _sender.alias
             },
             message: text,
+            deliveryToken,
             sentOn: Date.now()
           });
 
@@ -297,31 +301,32 @@
 
   var _onIncomingMessage = function (signal) {
     _log(_logEventData.actionReceiveMessage, _logEventData.variationAttempt);
-    _renderChatMessage(signal.data.sender._id, signal.data.sender.name, signal.data.message, signal.data.createdAt);
+
+    // If message's sender is not user, render incoming message as chatbubble
+    // Else, message was sent by user: update "sending" message to "sender name, timeago text"
+    const myUid = JSON.parse(_session.connection.data).user;
+    if (myUid !== signal.data.sender._id) {
+      _renderChatMessage(
+        signal.data.sender._id,
+        signal.data.sender.name,
+        signal.data.message,
+        signal.data.createdAt
+      );
+    } else {
+      const newItemTimestamp = '<div class="ots-item-timestamp">' + signal.data.sender.name + ', <span data-livestamp=" ' + new Date(signal.data.createdAt) + '" </span></div>';
+      // Get div with deliveryToken class and replace with name + timeago
+      $('.' + signal.data.deliveryToken).replaceWith(newItemTimestamp);
+    }
+
     _log(_logEventData.actionReceiveMessage, _logEventData.variationSuccess);
   };
 
   var _handleTextChat = function (event) {
-    // TODO: when setting up pending/delivered messages, if message sender is this current user, change message state from pending->delivered
-    // _handleMessageSent is where we need to inject the message into the chat (with a pending state)
-
-    // const myId = JSON.parse(_session.connection.data).user;
-    // const fromId = event.data.sender._id;
-    // if (myId === fromId) {
-    // }
-    
     var handler = _onIncomingMessage(event);
     if (handler && typeof handler === 'function') {
       handler(event);
     }
     _triggerEvent('messageReceived', event);
-  };
-
-  var _deliverUnsentMessages = function () {
-    _sentMessageHistory.forEach(function (message) {
-      _sendMessage(message.recipient, message.message);
-    });
-    _sentMessageHistory = [];
   };
 
   var _initTextChat = function () {
@@ -339,7 +344,12 @@
     axios.get(url)
       .then(function (res) {
         res.data.reverse().forEach(function (data) {
-          _renderChatMessage(data.sender._id, data.sender.name, data.message, data.createdAt);
+          _renderChatMessage(
+            data.sender._id,
+            data.sender.name,
+            data.message,
+            data.createdAt
+          );
         });
       })
       .catch(function (err) {
@@ -423,7 +433,7 @@
     });
 
     return _.defaults(_.omit(options, ['accPack', '_sender']), {
-      limitCharacterMessage: 8000,
+      limitCharacterMessage: 6000,
       controlsContainer: '#feedControls',
       textChatContainer: '#chatContainer',
       alwaysOpen: false,
@@ -442,32 +452,9 @@
     _accPack && _accPack.registerEvents(events);
   };
 
-  var _handleConnectionCreated = function (event) {
-    if (event && event.connection.connectionId !== _session.connection.connectionId) {
-      _remoteParticipant = true;
-      _hideWaitingMessage();
-    }
-  };
-
-  var _handleStreamCreated = function (event) {
-    if (event && event.stream.connection.connectionId !== _session.connection.connectionId) {
-      _remoteParticipant = true;
-      _hideWaitingMessage();
-    }
-  };
-
-  var _handleStreamDestroyed = function () {
-    if (_session.streams.length() < 2) {
-      _remoteParticipant = false;
-    }
-  };
-
   var _addEventListeners = function () {
 
     if (_accPack) {
-      _accPack.registerEventListener('streamCreated', _handleStreamCreated);
-      _accPack.registerEventListener('streamDestroyed', _handleStreamDestroyed);
-
       _accPack.registerEventListener('startCall', function () {
         if (!_this.options.alwaysOpen) {
           if (_controlAdded) {
@@ -486,19 +473,7 @@
           }
         }
       });
-    } else {
-      _session.on('streamCreated', _handleStreamCreated);
-      _session.on('streamDestroyed', _handleStreamDestroyed);
     }
-
-    _session.on('connectionCreated', _handleConnectionCreated);
-
-    /**
-     * We need to check for remote participants in case we were the last party to join and
-     * the session event fired before the text chat component was initialized.
-     */
-    _handleStreamCreated();
-
   };
 
   // Constructor
@@ -541,9 +516,6 @@
     },
     hideTextChat: function () {
       _hideTextChat();
-    },
-    deliverUnsentMessages: function () {
-      _deliverUnsentMessages();
     }
   };
 
