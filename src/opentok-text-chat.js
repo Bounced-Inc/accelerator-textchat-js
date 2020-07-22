@@ -130,8 +130,9 @@
       '<div class="ots-message-item ots-message-sent">',
       '</div>',
       '</div>',
-      '<div class="ots-send-message-box">',
-      '<input type="text" maxlength=' + _this.options.limitCharacterMessage + ' class="ots-message-input" placeholder="Enter your message here" id="messageBox">',
+      '<div class="ots-send-message-box" style="height:70px;">', //
+      '<textarea type="text" maxlength=' + _this.options.limitCharacterMessage + ' class="ots-message-input" placeholder="Enter your message here" id="messageBox" style="height:100%; line-height:1.5; padding:12.5px 12.5px 0;">', //
+      '</textarea>',
       '<button class="ots-icon-check" id="sendMessage" type="submit"></button>',
       '</div>',
       '</div>',
@@ -150,7 +151,7 @@
     /* eslint-disable max-len, prefer-template */
     const pendingMessageClass = 'ots-item-timestamp ' + message.deliveryToken;
     var bubble = [
-      '<div class="' + message.messageClass + '" >',
+      '<div class="' + message.messageClass + '" style="margin: 15px 17.5px 0 17.5px;">',
       '<div class="ots-user-name-initial"> ' + message.username[0] + '</div>',
       message.renderAsPending
         ? '<div class="' + pendingMessageClass + '"> Sending... </div>'
