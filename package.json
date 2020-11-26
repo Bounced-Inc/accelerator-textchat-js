@@ -1,6 +1,6 @@
 {
   "name": "@bouncedinc/opentok-text-chat",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "OpenTok text chat accelerator pack",
   "main": "dist/opentok-text-chat.js",
   "directories": {
