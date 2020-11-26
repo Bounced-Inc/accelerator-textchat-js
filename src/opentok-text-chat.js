@@ -56,14 +56,6 @@
     variationSuccess: 'Success'
   };
 
-  // Set constants
-  const token = localStorage.getItem('token');
-
-  axios.defaults.baseURL = process.env.REACT_APP_BUILD_ENV === 'development'
-    ? process.env.REACT_APP_DEV_BASE_URL
-    : process.env.REACT_APP_PROD_BASE_URL;
-  axios.defaults.headers.common.Authorization = 'Bearer ' + token;
-
   const eventId = window.location.pathname.replace('/events/', '').replace('/virtual', '');
 
   var _logAnalytics = function () {
@@ -171,7 +163,7 @@
     message,
     sentOn,
     deliveryToken,
-    renderAsPending = false
+    renderAsPending
   ) {
     // _sender.id is randomly generated; we need to use _session... (myUid) to check user id
     const myUid = JSON.parse(_session.connection.data).user;
@@ -184,8 +176,8 @@
       message: message,
       messageClass: sentByClass,
       time: sentOn,
-      deliveryToken,
-      renderAsPending,
+      deliveryToken: deliveryToken,
+      renderAsPending: renderAsPending || false,
     });
 
     const chatholder = $(_newMessages);
@@ -227,7 +219,7 @@
     // POST message to /chats route along with randomly generated deliveryToken
     // (for client to verify message was sent succesfully on signal receipt)
     const url = '/api/events/' + eventId + '/chats';
-    axios.post(url, { message: message, deliveryToken })
+    axios.post(url, { message: message, deliveryToken: deliveryToken })
       .then(deferred.resolve())
       .catch(function (err) {
         console.log(err);
@@ -247,7 +239,7 @@
               alias: _sender.alias
             },
             message: text,
-            deliveryToken,
+            deliveryToken: deliveryToken,
             sentOn: Date.now()
           });
 
